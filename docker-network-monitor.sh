@@ -1,5 +1,68 @@
 #!/bin/bash
 
+# 检查Docker是否安装
+check_docker_installed() {
+    if ! command -v docker &> /dev/null; then
+        echo "错误: Docker未安装，无法运行此脚本。"
+        echo "请先安装Docker后再运行。"
+        exit 1
+    fi
+}
+
+# 检查immortalwrt-image镜像是否存在
+check_image_exists() {
+    if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^immortalwrt-image:latest$"; then
+        echo "镜像 'immortalwrt-image' 不存在，将创建镜像..."
+        create_image
+    else
+        echo "镜像 'immortalwrt-image' 已存在，继续运行..."
+    fi
+}
+
+# 创建immortalwrt-image镜像
+create_image() {
+    echo "开始创建immortalwrt-image镜像..."
+    
+    # 创建临时目录
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir"
+    
+    echo "下载并解压rootfs.tar.gz..."
+    wget -O rootfs.tar.gz https://downloads.immortalwrt.org/releases/24.10.1/targets/armsr/armv8/immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "下载rootfs.tar.gz失败，请检查网络连接或URL是否有效。"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    gzip -d rootfs.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "解压rootfs.tar.gz失败。"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    echo "创建Dockerfile..."
+    cat <<EOF >"Dockerfile"
+FROM scratch
+ADD rootfs.tar /
+EOF
+    
+    echo "构建Docker镜像..."
+    docker build -t immortalwrt-image .
+    if [ $? -ne 0 ]; then
+        echo "构建Docker镜像失败。"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    echo "清理临时文件..."
+    cd - > /dev/null
+    rm -rf "$temp_dir"
+    
+    echo "镜像创建成功！"
+}
+
 # 获取当前网络配置
 get_current_network() {
     local interface=$(ip route | grep default | awk '{print $5}' | head -n 1)
@@ -192,6 +255,12 @@ update_network_configuration() {
 
 # 主函数
 main() {
+    # 检查Docker是否安装
+    check_docker_installed
+    
+    # 检查镜像是否存在
+    check_image_exists
+    
     # 获取当前网络信息
     IFS='|' read -r interface gateway subnet <<< "$(get_current_network)"
     

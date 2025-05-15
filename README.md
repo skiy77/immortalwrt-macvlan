@@ -4,6 +4,10 @@
 
 ## 功能
 
+- 在脚本运行前检查必要的环境：
+  * Docker是否已安装（未安装时会提示并退出）
+  * immortalwrt-image镜像是否存在（不存在时会自动创建-适合SOC为armsr/armv8）
+
 - 在系统启动时分别检查以下组件是否存在：
   * immortalwrt容器
   * macnet网络
@@ -31,6 +35,21 @@
     - 重启容器网络服务
   * 如果一致且容器正常运行，保持现有配置不变
 
+## 自动镜像创建
+
+如果系统中不存在 immortalwrt-image 镜像，脚本会自动执行以下步骤来创建：
+
+1. 下载 ImmortalWrt rootfs
+   - 自动下载 immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz
+   - 解压下载的文件
+
+2. 创建 Docker 镜像
+   - 自动创建必要的 Dockerfile
+   - 构建 immortalwrt-image 镜像
+   - 清理临时文件
+
+注意：镜像创建过程需要网络连接，请确保您的系统能够访问互联网。整个过程是自动的，无需手动干预。
+
 ## 文件说明
 
 - `docker-network-monitor.sh`: 主监控脚本
@@ -41,7 +60,7 @@
 
 ### Linux系统
 
-1. 确保已安装Docker并且immortalwrt容器已经创建
+1. 确保已安装Docker（脚本会自动检测，未安装时会提示）
 2. 将所有文件下载到同一目录
 3. 运行安装脚本（需要root权限）:
 
@@ -137,8 +156,14 @@ systemctl restart docker-network-monitor.service
 
 如果服务无法正常工作，请检查：
 
-1. Docker服务是否正在运行
-2. immortalwrt容器是否存在
+1. Docker是否已正确安装
+   - 运行 `docker --version` 验证Docker安装
+   - 如果未安装，请先安装Docker
+2. immortalwrt-image镜像是否存在
+   - 运行 `docker images | grep immortalwrt-image` 检查
+   - 如果自动创建失败，检查网络连接和下载URL是否有效
+3. Docker服务是否正在运行
+4. immortalwrt容器是否存在
 3. 网络接口是否正确识别
 4. 日志中是否有错误信息
 5. 系统启动顺序是否正确（确保网络和Docker服务已经完全启动）
