@@ -1,0 +1,12 @@
+[Unit]
+Description=Docker Network Configuration Service
+After=docker.service network-online.target
+Requires=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/docker-network-monitor.sh
+
+[Install]
+WantedBy=multi-user.target
