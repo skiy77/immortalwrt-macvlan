@@ -144,7 +144,18 @@ update_network_config() {
     local container_ip="${ip_base}.${CONTAINER_IP_LAST_OCTET}"
     
     echo "Updating container network configuration..."
-    docker exec immortalwrt ash -c "cat > /etc/config/network << 'EOF'
+    
+    # 检查容器内是否已存在网络配置
+    local config_exists=$(docker exec immortalwrt ash -c "[ -f /etc/config/network ] && echo 'yes' || echo 'no'")
+    
+    # 检查lan接口是否存在，以及网关和DNS是否已配置
+    if [ "$config_exists" = "no" ] || \
+       [ "$(docker exec immortalwrt ash -c "uci show network.lan 2>/dev/null || echo 'missing'")" = "missing" ] || \
+       [ "$(docker exec immortalwrt ash -c "uci -q get network.lan.gateway || echo 'missing'")" = "missing" ] || \
+       [ "$(docker exec immortalwrt ash -c "uci -q get network.lan.dns || echo 'missing'")" = "missing" ]; then
+        # 如果配置不存在或lan接口未配置，创建完整配置
+        echo "Creating new network configuration..."
+        docker exec immortalwrt ash -c "cat > /etc/config/network << 'EOF'
 config interface 'loopback'
 	option device 'lo'
 	option proto 'static'
@@ -168,8 +179,25 @@ config interface 'lan'
 	option dns '${gateway}'
 	option device 'br-lan'
 EOF"
+    else
+        # 如果配置已存在，只更新必要的参数
+        echo "Updating existing network configuration..."
+        docker exec immortalwrt ash -c "
+            # 更新IP地址
+            uci set network.lan.ipaddr='${container_ip}'
+            # 更新网关
+            uci set network.lan.gateway='${gateway}'
+            # 更新DNS
+            uci set network.lan.dns='${gateway}'
+            # 保存更改
+            uci commit network
+        "
+    fi
 
+    # 重启网络服务以应用更改
     docker exec immortalwrt /etc/init.d/network restart
+    
+    echo "Network configuration in container updated."
 }
 
 # 更新网络配置
