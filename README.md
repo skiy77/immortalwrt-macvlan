@@ -58,6 +58,45 @@
 - `docker-network-monitor.sh`: 主监控脚本
 - `docker-network-monitor.service`: systemd服务文件
 - `install.sh`: 安装脚本
+- `armbian-network-config.sh`: Armbian网络配置工具
+
+### armbian-network-config.sh 功能说明
+
+此脚本用于配置Armbian系统的网络设置，主要功能包括：
+
+1. **自动网络检测**
+   - 自动识别当前活动的网络接口
+   - 自动获取接口的IP地址
+
+2. **IPv6配置**
+   - 禁用IPv6功能（修改/etc/sysctl.conf）
+   - 禁用IPv6转发功能
+   - 永久性配置（重启后仍然有效）
+
+3. **临时网络配置**
+   - 修改默认网关（临时，重启后失效）
+   - 修改DNS服务器（临时，重启后失效）
+
+4. **使用方式**
+   ```bash
+   # 修改网关
+   sudo ./armbian-network-config.sh g=192.168.1.1
+   
+   # 修改DNS
+   sudo ./armbian-network-config.sh n=192.168.1.1
+   
+   # 同时修改网关和DNS
+   sudo ./armbian-network-config.sh g=192.168.1.1 n=192.168.1.1
+   
+   # 查看帮助
+   sudo ./armbian-network-config.sh
+   ```
+
+5. **注意事项**
+   - 必须使用root权限运行
+   - 网关和DNS修改是临时的
+   - IPv6修改是永久性的
+   - 脚本会自动检测网络环境
 
 ## 安装步骤
 
