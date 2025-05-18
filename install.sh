@@ -15,6 +15,13 @@ chmod +x /usr/local/bin/docker-network-monitor.sh
 echo "安装systemd服务..."
 cp docker-network-monitor.service /etc/systemd/system/
 
+# 首次运行脚本
+echo "执行首次运行配置..."
+echo "这将创建必要的网络配置和容器..."
+/usr/local/bin/docker-network-monitor.sh
+echo "首次运行配置完成"
+echo ""
+
 # 重新加载systemd配置
 echo "重新加载systemd配置..."
 systemctl daemon-reload

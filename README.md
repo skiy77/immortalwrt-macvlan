@@ -40,7 +40,10 @@
 如果系统中不存在 immortalwrt-image 镜像，脚本会自动执行以下步骤来创建：
 
 1. 下载 ImmortalWrt rootfs
-   - 自动下载 immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz
+   - 自动下载 rootfs.tar.gz 文件
+   - 下载地址可通过脚本开头的 ROOTFS_URL 变量配置
+   - 默认下载 immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz
+   - 如需使用其他版本或架构，请修改 ROOTFS_URL 变量
    - 解压下载的文件
 
 2. 创建 Docker 镜像
@@ -67,6 +70,12 @@
 ```bash
 sudo bash install.sh
 ```
+
+安装过程中会自动执行首次运行配置，您将看到：
+- Docker安装检查
+- 镜像存在性检查（如果不存在会自动创建）
+- 网络配置创建
+- 容器创建和配置
 
 ### Windows系统
 
@@ -114,8 +123,59 @@ docker run --name immortalwrt -d \
 - shim接口IP: 宿主机网段.251（例如：192.168.1.251/24）
 - 容器IP: 宿主机网段.248（例如：192.168.1.248）
 - 子网配置: 自动从网关IP推导（例如：网关为192.168.1.1时，子网为192.168.1.0/24）
+- macvlan-shim开关: 默认启用 (MACVLAN_SHIM_ENABLED=1)
+- rootfs下载地址: 默认为ImmortalWrt 24.10.1 armsr/armv8版本 (可通过ROOTFS_URL变量配置)
+- 容器IP最后一位: 默认248 (可通过CONTAINER_IP_LAST_OCTET变量配置)
+- macvlan-shim IP最后一位: 默认251 (可通过SHIM_IP_LAST_OCTET变量配置)
 
 如需修改这些配置，请编辑`docker-network-monitor.sh`文件中的相应变量。
+
+### Macvlan-Shim配置
+脚本现在支持通过配置选项控制是否启用macvlan-shim功能：
+
+- `MACVLAN_SHIM_ENABLED=1`: 启用macvlan-shim（默认值）
+  * 创建macvlan-shim接口，允许宿主机与容器网络通信
+  * 保持完整的网络功能，包括宿主机与容器的双向通信
+
+- `MACVLAN_SHIM_ENABLED=0`: 禁用macvlan-shim
+  * 不创建macvlan-shim接口
+  * 适用于遇到macvlan-shim相关问题的情况
+  * 注意：禁用后宿主机将无法直接与容器通信
+
+要修改此设置，请编辑`docker-network-monitor.sh`文件开头的`MACVLAN_SHIM_ENABLED`变量。
+
+### Rootfs下载配置
+脚本支持自定义rootfs.tar.gz的下载地址，方便使用不同版本或架构的ImmortalWrt：
+
+- 默认值：`https://downloads.immortalwrt.org/releases/24.10.1/targets/armsr/armv8/immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz`
+- 配置方法：编辑`docker-network-monitor.sh`文件开头的`ROOTFS_URL`变量
+
+自定义下载地址的常见用途：
+- 使用不同版本的ImmortalWrt（如21.02、22.03等）
+- 使用不同架构的ImmortalWrt（如x86_64、mipsel等）
+- 使用本地镜像或更快的下载源
+- 使用自定义构建的rootfs
+
+注意：确保提供的URL指向有效的ImmortalWrt rootfs.tar.gz文件，否则镜像创建将失败。
+
+### IP地址配置
+脚本支持自定义容器和macvlan-shim接口的IP地址最后一位：
+
+1. 容器IP配置 (CONTAINER_IP_LAST_OCTET)
+   - 默认值：248
+   - 示例：如果网关是192.168.1.1，容器IP将是192.168.1.248
+   - 配置方法：编辑脚本开头的CONTAINER_IP_LAST_OCTET变量
+
+2. Macvlan-shim接口IP配置 (SHIM_IP_LAST_OCTET)
+   - 默认值：251
+   - 示例：如果网关是192.168.1.1，shim接口IP将是192.168.1.251
+   - 配置方法：编辑脚本开头的SHIM_IP_LAST_OCTET变量
+
+注意事项：
+- 确保选择的IP地址未被网络中其他设备使用
+- 建议使用较高的数字（如200以上）以避免与DHCP分配的IP冲突
+- 容器IP和shim接口IP不能相同
+- 如果更改了IP配置，需要重新运行脚本以应用新的配置
 
 ### 网络配置说明
 - 脚本会自动从网关地址推导子网配置

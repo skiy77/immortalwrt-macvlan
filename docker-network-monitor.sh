@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# 配置选项
+# 设置为1启用macvlan-shim，设置为0禁用macvlan-shim
+MACVLAN_SHIM_ENABLED=0
+
+# rootfs.tar.gz下载地址
+ROOTFS_URL="https://downloads.immortalwrt.org/releases/24.10.1/targets/armsr/armv8/immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz"
+
+# IP地址配置
+CONTAINER_IP_LAST_OCTET=248  # 容器IP地址最后一位
+SHIM_IP_LAST_OCTET=251      # macvlan-shim接口IP地址最后一位
+
 # 检查Docker是否安装
 check_docker_installed() {
     if ! command -v docker &> /dev/null; then
@@ -28,9 +39,11 @@ create_image() {
     cd "$temp_dir"
     
     echo "下载并解压rootfs.tar.gz..."
-    wget -O rootfs.tar.gz https://downloads.immortalwrt.org/releases/24.10.1/targets/armsr/armv8/immortalwrt-24.10.1-armsr-armv8-rootfs.tar.gz
+    echo "使用下载地址: $ROOTFS_URL"
+    wget -O rootfs.tar.gz "$ROOTFS_URL"
     if [ $? -ne 0 ]; then
         echo "下载rootfs.tar.gz失败，请检查网络连接或URL是否有效。"
+        echo "当前URL: $ROOTFS_URL"
         rm -rf "$temp_dir"
         exit 1
     fi
@@ -109,7 +122,7 @@ create_shim() {
     
     echo "Creating macvlan-shim interface..."
     ip link add macvlan-shim link $interface type macvlan mode bridge
-    ip addr add ${ip_base}.251/24 dev macvlan-shim
+    ip addr add ${ip_base}.${SHIM_IP_LAST_OCTET}/24 dev macvlan-shim
     ip link set macvlan-shim up
 }
 
@@ -128,7 +141,7 @@ create_container() {
 update_network_config() {
     local gateway=$1
     local ip_base=$(echo $gateway | cut -d. -f1-3)
-    local container_ip="${ip_base}.248"
+    local container_ip="${ip_base}.${CONTAINER_IP_LAST_OCTET}"
     
     echo "Updating container network configuration..."
     docker exec immortalwrt ash -c "cat > /etc/config/network << 'EOF'
@@ -140,6 +153,12 @@ config interface 'loopback'
 
 config globals 'globals'
 	option ula_prefix 'fd98:9655:39f9::/48'
+
+config device
+	option name 'br-lan'
+	option type 'bridge'
+	list ports 'eth0'
+
 config interface 'lan'
 	option proto 'static'
 	option netmask '255.255.255.0'
@@ -147,7 +166,7 @@ config interface 'lan'
 	option ipaddr '${container_ip}'
 	option gateway '${gateway}'
 	option dns '${gateway}'
-	option device 'eth0'
+	option device 'br-lan'
 EOF"
 
     docker exec immortalwrt /etc/init.d/network restart
@@ -227,14 +246,19 @@ update_network_configuration() {
             create_macvlan "$interface" "$subnet" "$gateway"
         fi
         
-        # 确保macvlan-shim接口存在
-        if ! check_shim; then
-            # 如果不存在，创建接口
-            create_shim "$interface" "$gateway"
+        # 只有在启用macvlan-shim时才处理shim接口
+        if [ "$MACVLAN_SHIM_ENABLED" -eq 1 ]; then
+            # 确保macvlan-shim接口存在
+            if ! check_shim; then
+                # 如果不存在，创建接口
+                create_shim "$interface" "$gateway"
+            else
+                # 如果存在，删除并重建
+                ip link del macvlan-shim 2>/dev/null || true
+                create_shim "$interface" "$gateway"
+            fi
         else
-            # 如果存在，删除并重建
-            ip link del macvlan-shim 2>/dev/null || true
-            create_shim "$interface" "$gateway"
+            echo "Macvlan-shim is disabled in configuration. Skipping shim interface setup."
         fi
         
         # 连接容器到新网络
@@ -288,11 +312,17 @@ main() {
         echo "Macvlan network 'macnet' not found."
     fi
     
-    if check_shim; then
-        echo "Macvlan-shim interface exists."
-        shim_exists=true
+    # 只有在启用macvlan-shim时才检查和创建
+    if [ "$MACVLAN_SHIM_ENABLED" -eq 1 ]; then
+        if check_shim; then
+            echo "Macvlan-shim interface exists."
+            shim_exists=true
+        else
+            echo "Macvlan-shim interface not found."
+        fi
     else
-        echo "Macvlan-shim interface not found."
+        echo "Macvlan-shim is disabled in configuration."
+        shim_exists=true  # 设为true以跳过创建
     fi
     
     # 创建缺失的组件
@@ -300,7 +330,8 @@ main() {
         create_macvlan "$interface" "$subnet" "$gateway"
     fi
     
-    if ! $shim_exists; then
+    # 只有在启用macvlan-shim时才创建
+    if [ "$MACVLAN_SHIM_ENABLED" -eq 1 ] && ! $shim_exists; then
         create_shim "$interface" "$gateway"
     fi
     
