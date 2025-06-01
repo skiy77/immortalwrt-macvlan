@@ -178,6 +178,11 @@ config interface 'lan'
 	option gateway '${gateway}'
 	option dns '${gateway}'
 	option device 'br-lan'
+
+config device
+    option name 'eth0'
+    option macaddr '8E:DB:A9:15:BA:83'
+
 EOF"
     else
         # 如果配置已存在，只更新必要的参数
